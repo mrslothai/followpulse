@@ -32,6 +32,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const username = searchParams.get('username') || 'therajeshchityal';
+    const forceRefresh = searchParams.get('force') === 'true';
 
     if (!username) {
       return NextResponse.json(
@@ -40,8 +41,21 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Fetch current followers
-    const profile = await getInstagramProfile(username);
+    console.log(`[API] Fetching followers for @${username}${forceRefresh ? ' (force refresh)' : ''}...`);
+
+    // Fetch current followers (with retry for fresh data)
+    let profile = await getInstagramProfile(username);
+    
+    // If force refresh is requested, try again
+    if (forceRefresh && profile) {
+      console.log(`[API] Force refresh requested, retrying...`);
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const retryProfile = await getInstagramProfile(username);
+      if (retryProfile && retryProfile.followers > profile.followers) {
+        profile = retryProfile;
+        console.log(`[API] Got fresher data on retry: ${retryProfile.followers} followers`);
+      }
+    }
 
     if (!profile) {
       return NextResponse.json(
@@ -57,11 +71,12 @@ export async function GET(request: NextRequest) {
       try {
         const userRef = ref(database, `users/${username}`);
         const timestamp = new Date().toISOString();
+        const sanitizedTimestamp = timestamp.replace(/[.\-:]/g, '');
 
         const userSnapshot = await get(userRef);
         const existingData = userSnapshot.val() || {};
 
-        const historyRef = ref(database, `users/${username}/history/${timestamp}`);
+        const historyRef = ref(database, `users/${username}/history/${sanitizedTimestamp}`);
         await set(historyRef, {
           followers: profile.followers,
           timestamp,
@@ -119,8 +134,9 @@ export async function POST(request: NextRequest) {
       try {
         const userRef = ref(database, `users/${username}`);
         const timestamp = new Date().toISOString();
+        const sanitizedTimestamp = timestamp.replace(/[.\-:]/g, '');
 
-        const historyRef = ref(database, `users/${username}/history/${timestamp}`);
+        const historyRef = ref(database, `users/${username}/history/${sanitizedTimestamp}`);
         await set(historyRef, {
           followers: profile.followers,
           timestamp,
