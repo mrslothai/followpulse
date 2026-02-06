@@ -1,5 +1,12 @@
-// Demo data while we set up official Instagram API
-// In production, replace this with Instagram Graph API credentials
+import axios from 'axios';
+
+// RapidAPI Instagram Scraper integration
+// Get your API key from: https://rapidapi.com/rocketapi/api/instagram-scraper-api2
+
+const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
+const RAPIDAPI_HOST = 'instagram-scraper-api2.p.rapidapi.com';
+
+// Fallback demo data
 const demoProfiles: Record<string, any> = {
   'therajeshchityal': {
     username: 'therajeshchityal',
@@ -16,21 +23,53 @@ export async function getInstagramProfile(username: string) {
   try {
     console.log(`[Scraper] Fetching Instagram profile for @${username}...`);
 
-    // For demo/testing: Return demo data
-    if (demoProfiles[username]) {
-      console.log(`[Scraper] ✅ Returning demo data for @${username}`);
-      return demoProfiles[username];
+    // If RapidAPI key is configured, use real API
+    if (RAPIDAPI_KEY && RAPIDAPI_KEY !== 'your_rapidapi_key_here') {
+      console.log(`[Scraper] Using RapidAPI...`);
+      
+      const response = await axios.get(
+        `https://${RAPIDAPI_HOST}/v1/info`,
+        {
+          params: {
+            username_or_id_or_url: username,
+          },
+          headers: {
+            'x-rapidapi-key': RAPIDAPI_KEY,
+            'x-rapidapi-host': RAPIDAPI_HOST,
+          },
+          timeout: 15000,
+        }
+      );
+
+      const data = response.data?.data;
+      
+      if (data) {
+        console.log(`[Scraper] ✅ RapidAPI returned real data: ${data.follower_count} followers`);
+        
+        return {
+          username: data.username,
+          followers: data.follower_count || 0,
+          following: data.following_count || 0,
+          profilePicUrl: data.profile_pic_url_hd || data.profile_pic_url || '',
+          biography: data.biography || '',
+          fullName: data.full_name || data.username,
+          isDemo: false,
+        };
+      }
+    } else {
+      console.log(`[Scraper] RapidAPI key not configured, using demo data`);
     }
 
-    // In production with official Instagram API:
-    // const response = await axios.get(
-    //   `https://graph.instagram.com/me?fields=id,username,name,biography,website,profile_picture_url,followers_count&access_token=${process.env.INSTAGRAM_GRAPH_API_TOKEN}`
-    // );
+    // Fallback to demo data
+    if (demoProfiles[username]) {
+      console.log(`[Scraper] Returning demo data for @${username}`);
+      return demoProfiles[username];
+    }
 
     console.log(`[Scraper] No data found for @${username}`);
     return null;
   } catch (error: any) {
-    console.error(`[Scraper] Error fetching Instagram profile:`, error.message);
+    console.error(`[Scraper] Error:`, error.response?.data || error.message);
     
     // Return demo data on error
     if (demoProfiles[username]) {

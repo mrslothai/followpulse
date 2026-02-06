@@ -10,6 +10,7 @@ interface ProfileData {
   profilePicUrl: string;
   fullName: string;
   biography: string;
+  isDemo?: boolean;
 }
 
 interface DashboardProps {
@@ -109,6 +110,13 @@ export default function Dashboard({ initialUsername = 'therajeshchityal' }: Dash
         {error && (
           <div className="mb-6 p-4 bg-red-500/20 border border-red-500 rounded-lg text-red-300">
             {error}
+          </div>
+        )}
+
+        {/* Demo Mode Notice */}
+        {profile?.isDemo && (
+          <div className="mb-6 p-4 bg-amber-500/20 border border-amber-500 rounded-lg text-amber-300">
+            ⚠️ <strong>Demo Mode:</strong> Add your RapidAPI key in Vercel to see real-time data.
           </div>
         )}
 
