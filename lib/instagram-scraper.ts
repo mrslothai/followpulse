@@ -4,71 +4,93 @@ export async function getInstagramProfile(username: string) {
   try {
     console.log(`[Scraper] Fetching Instagram profile for @${username}...`);
 
-    // Use Instagram's official API endpoint (works better on serverless)
+    // Fetch the Instagram profile page HTML
     const response = await axios.get(
-      `https://www.instagram.com/${username}/?__a=1&__w=1`,
+      `https://www.instagram.com/${username}/`,
       {
         headers: {
           'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
           'Accept-Language': 'en-US,en;q=0.9',
           'Accept-Encoding': 'gzip, deflate, br',
-          'Cache-Control': 'no-cache, no-store, must-revalidate',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache',
         },
-        timeout: 15000,
+        timeout: 20000,
       }
     );
 
-    const data = response.data;
-    const user = data?.user;
+    const html = response.data;
+    console.log(`[Scraper] Got HTML response, parsing...`);
 
-    if (user) {
-      console.log(`[Scraper] Successfully fetched real data for @${username}`);
-      return {
-        username: user.username,
-        followers: user.edge_followed_by?.count || user.follower_count || 0,
-        following: user.edge_follow?.count || user.following_count || 0,
-        profilePicUrl: user.profile_pic_url_hd || user.profile_pic_url || '',
-        biography: user.biography || '',
-        fullName: user.full_name || user.username,
-      };
-    }
+    // Method 1: Extract from og:description meta tag
+    // Pattern: "325 Followers, 26 Following, 60 Posts - See Instagram photos and videos"
+    const ogDescriptionMatch = html.match(
+      /<meta\s+property="og:description"\s+content="([^"]*)/
+    );
+    
+    if (ogDescriptionMatch) {
+      const description = ogDescriptionMatch[1];
+      console.log(`[Scraper] og:description: ${description.substring(0, 100)}`);
+      
+      const followersMatch = description.match(/(\d+)\s+Followers?/);
+      const followingMatch = description.match(/(\d+)\s+Following/);
+      const nameMatch = html.match(/<meta\s+property="og:title"\s+content="([^"]*)/);
+      const picMatch = html.match(/<meta\s+property="og:image"\s+content="([^"]*)/);
 
-    return null;
-  } catch (error) {
-    console.error(`[Scraper] Error with API endpoint:`, error);
+      if (followersMatch) {
+        const followers = parseInt(followersMatch[1]);
+        const following = followingMatch ? parseInt(followingMatch[1]) : 0;
+        const fullName = nameMatch ? nameMatch[1].split(' - ')[0] : username;
+        const profilePic = picMatch ? picMatch[1] : '';
 
-    // Fallback: Try alternative endpoint
-    try {
-      const altResponse = await axios.get(
-        `https://instagram.com/api/v1/users/web_profile_info/?username=${username}`,
-        {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json',
-            'Cache-Control': 'no-cache',
-          },
-          timeout: 15000,
-        }
-      );
+        console.log(`[Scraper] ✅ Successfully extracted: ${followers} followers`);
 
-      const user = altResponse.data?.data?.user;
-      if (user) {
         return {
-          username: user.username,
-          followers: user.edge_followed_by?.count || 0,
-          following: user.edge_follow?.count || 0,
-          profilePicUrl: user.profile_pic_url_hd || '',
-          biography: user.biography || '',
-          fullName: user.full_name || user.username,
+          username: username,
+          followers: followers,
+          following: following,
+          profilePicUrl: profilePic,
+          biography: '',
+          fullName: fullName,
         };
       }
-    } catch (altError) {
-      console.error(`[Scraper] Alternative endpoint also failed:`, altError);
     }
 
-    console.log(`[Scraper] Could not fetch data for @${username}`);
+    // Method 2: Look in window.__data embedded in HTML
+    const sharedDataMatch = html.match(
+      /window\.__data\s*=\s*({.*?})\s*;<\/script>/s
+    );
+    if (sharedDataMatch) {
+      try {
+        const dataStr = sharedDataMatch[1];
+        const followersMatch = dataStr.match(/"edge_followed_by":{"count":(\d+)/);
+        if (followersMatch) {
+          return {
+            username: username,
+            followers: parseInt(followersMatch[1]),
+            following: 0,
+            profilePicUrl: '',
+            biography: '',
+            fullName: username,
+          };
+        }
+      } catch (e) {
+        console.error(`[Scraper] Error parsing embedded data:`, e);
+      }
+    }
+
+    console.log(`[Scraper] No follower data found in HTML`);
+    return null;
+  } catch (error: any) {
+    console.error(
+      `[Scraper] Error fetching Instagram profile for @${username}:`,
+      error.response?.status,
+      error.message
+    );
     return null;
   }
 }
@@ -77,9 +99,10 @@ export async function getInstagramFollowers(username: string): Promise<number | 
   try {
     const profile = await getInstagramProfile(username);
     if (profile) {
-      console.log(`[Scraper] Got ${profile.followers} followers for @${username}`);
+      console.log(`[Scraper] ✅ Got ${profile.followers} followers for @${username}`);
       return profile.followers;
     }
+    console.log(`[Scraper] No profile data returned`);
     return null;
   } catch (error) {
     console.error(`[Scraper] Error fetching followers:`, error);
