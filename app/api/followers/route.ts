@@ -1,7 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getInstagramFollowers, getInstagramProfile } from '@/lib/instagram-scraper';
-import { database } from '@/lib/firebase';
-import { ref, set, get, update } from 'firebase/database';
+import { getInstagramProfile } from '@/lib/instagram-scraper';
+
+let firebaseAvailable = false;
+let database: any = null;
+let ref: any;
+let set: any;
+let get: any;
+let update: any;
+
+// Try to import Firebase on first use
+async function ensureFirebase() {
+  if (firebaseAvailable || database) return;
+  
+  try {
+    const { database: db } = await import('@/lib/firebase');
+    if (db) {
+      const fbModule = await import('firebase/database');
+      database = db;
+      ref = fbModule.ref;
+      set = fbModule.set;
+      get = fbModule.get;
+      update = fbModule.update;
+      firebaseAvailable = true;
+    }
+  } catch (error) {
+    console.warn('Firebase not available. Install credentials in .env.local');
+  }
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,34 +45,42 @@ export async function GET(request: NextRequest) {
 
     if (!profile) {
       return NextResponse.json(
-        { error: 'Could not fetch Instagram profile' },
+        { error: 'Could not fetch Instagram profile. Check username and try again.' },
         { status: 400 }
       );
     }
 
-    // Store in Firebase
-    const userRef = ref(database, `users/${username}`);
-    const timestamp = new Date().toISOString();
+    // Try to store in Firebase if available
+    await ensureFirebase();
+    
+    if (firebaseAvailable && database) {
+      try {
+        const userRef = ref(database, `users/${username}`);
+        const timestamp = new Date().toISOString();
 
-    const userSnapshot = await get(userRef);
-    const existingData = userSnapshot.val() || {};
+        const userSnapshot = await get(userRef);
+        const existingData = userSnapshot.val() || {};
 
-    const historyRef = ref(database, `users/${username}/history/${timestamp}`);
-    await set(historyRef, {
-      followers: profile.followers,
-      timestamp,
-    });
+        const historyRef = ref(database, `users/${username}/history/${timestamp}`);
+        await set(historyRef, {
+          followers: profile.followers,
+          timestamp,
+        });
 
-    await update(userRef, {
-      lastUpdate: timestamp,
-      currentFollowers: profile.followers,
-      ...profile,
-    });
+        await update(userRef, {
+          lastUpdate: timestamp,
+          currentFollowers: profile.followers,
+          ...profile,
+        });
+      } catch (dbError) {
+        console.warn('Could not store in Firebase:', dbError);
+      }
+    }
 
     return NextResponse.json({
       success: true,
       profile,
-      previousFollowers: existingData.currentFollowers || 0,
+      previousFollowers: 0,
     });
   } catch (error) {
     console.error('Error in API route:', error);
@@ -79,21 +112,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Store in Firebase
-    const userRef = ref(database, `users/${username}`);
-    const timestamp = new Date().toISOString();
+    // Try to store in Firebase if available
+    await ensureFirebase();
+    
+    if (firebaseAvailable && database) {
+      try {
+        const userRef = ref(database, `users/${username}`);
+        const timestamp = new Date().toISOString();
 
-    const historyRef = ref(database, `users/${username}/history/${timestamp}`);
-    await set(historyRef, {
-      followers: profile.followers,
-      timestamp,
-    });
+        const historyRef = ref(database, `users/${username}/history/${timestamp}`);
+        await set(historyRef, {
+          followers: profile.followers,
+          timestamp,
+        });
 
-    await update(userRef, {
-      lastUpdate: timestamp,
-      currentFollowers: profile.followers,
-      ...profile,
-    });
+        await update(userRef, {
+          lastUpdate: timestamp,
+          currentFollowers: profile.followers,
+          ...profile,
+        });
+      } catch (dbError) {
+        console.warn('Could not store in Firebase:', dbError);
+      }
+    }
 
     return NextResponse.json({
       success: true,
