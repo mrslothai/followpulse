@@ -11,6 +11,7 @@ interface ProfileData {
   fullName: string;
   biography: string;
   isDemo?: boolean;
+  source?: 'apify' | 'instagram120' | 'demo';
 }
 
 interface DashboardProps {
@@ -191,10 +192,32 @@ export default function Dashboard({ initialUsername = 'therajeshchityal' }: Dash
               </button>
             </div>
 
-            {/* Last Updated */}
+            {/* Last Updated & Data Source */}
             {lastUpdated && (
-              <div className="text-center text-slate-400 text-sm">
-                Last updated: {lastUpdated.toLocaleTimeString()}
+              <div className="bg-slate-800 rounded-lg p-3 border border-slate-700/30 text-center">
+                <p className="text-slate-400 text-sm mb-2">
+                  Last updated: {lastUpdated.toLocaleTimeString()}
+                </p>
+                <div className="flex items-center justify-center gap-2">
+                  {profile.source === 'apify' && (
+                    <div className="flex items-center gap-2 px-3 py-1 bg-green-500/20 border border-green-500/50 rounded-full">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                      <span className="text-green-400 text-xs font-semibold">LIVE (Apify)</span>
+                    </div>
+                  )}
+                  {profile.source === 'instagram120' && (
+                    <div className="flex items-center gap-2 px-3 py-1 bg-blue-500/20 border border-blue-500/50 rounded-full">
+                      <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                      <span className="text-blue-400 text-xs font-semibold">CACHED (RapidAPI)</span>
+                    </div>
+                  )}
+                  {profile.source === 'demo' && (
+                    <div className="flex items-center gap-2 px-3 py-1 bg-amber-500/20 border border-amber-500/50 rounded-full">
+                      <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
+                      <span className="text-amber-400 text-xs font-semibold">DEMO</span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
